@@ -17,7 +17,7 @@ void parse_uri(char *uri, char *hostname, char *path, int *port);
 
 void handler(int connection_fd){
 
-    int dest_server_fd;                     //The destination server file descriptor
+    //int dest_server_fd;                     //The destination server file descriptor
     char buf[MAXLINE];
     char type[MAXLINE];
     char uri[MAXLINE];
@@ -27,7 +27,7 @@ void handler(int connection_fd){
     int port;
 
     rio_t rio_client;                      //Client rio_t
-    rio_t rio_server;                      //Server rio_t
+    //rio_t rio_server;                      //Server rio_t
 
     Rio_readinitb(&rio_client, connection_fd);
     Rio_readlineb(&rio_client, buf, MAXLINE);
@@ -53,10 +53,11 @@ void parse_uri(char *uri, char *hostname, char * path, int *port){
 
     //printf("URI: %s\n", uri);
 
-    char* end_hostname;
+//   char* end_hostname;
     char* sub_str1 = strstr(uri, "//");
-    char* sub;
-    char num[5] = {NULL, NULL, NULL, NULL, NULL};
+    char my_sub[MAXLINE];
+    char* sub = my_sub;
+    char num[5] = {'\0', '\0', '\0', '\0', '\0'};
 
     if(sub_str1 != NULL){
         int i = 2;                                                      //advance past the '//'
@@ -69,9 +70,10 @@ void parse_uri(char *uri, char *hostname, char * path, int *port){
     //Get Path
     char *sub_path = strstr(sub, "/");
     if(sub_path == NULL)
-        sub_path = '/';
+        sub_path = "/";
     path = sub_path;
     printf("PATH: %s\n", path);
+
 
     /*  Check if colon exists in sub-string
     *   if it exists, we have a designated port
@@ -86,12 +88,12 @@ void parse_uri(char *uri, char *hostname, char * path, int *port){
                 break;
             num[y++] = port_substring[x++];
         }
-        port = atoi(num);
+        *port = atoi(num);
     }
     else
-        port = 80;
+        *port = 80;                                                  //Default port 80
 
-    printf("PORT: %d\n", port);
+    printf("PORT: %d\n", *port);
 
 }
 
