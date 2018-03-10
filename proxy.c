@@ -51,7 +51,7 @@ void handler(int connection_fd){
 
 void parse_uri(char *uri, char *hostname, char * path, int *port){
 
-    printf("URI: %s\n", uri);
+    //printf("URI: %s\n", uri);
 
     char* end_hostname;
     char* sub_str1 = strstr(uri, "//");
@@ -66,7 +66,17 @@ void parse_uri(char *uri, char *hostname, char * path, int *port){
     }
     printf("sub: %s\n", sub);                                      //sub contains everything after http://
 
-    //Check if colon exists in sub-string. If it does, then we have a port to be designated
+    //Get Path
+    char *sub_path = strstr(sub, "/");
+    if(sub_path == NULL)
+        sub_path = '/';
+    path = sub_path;
+    printf("PATH: %s\n", path);
+
+    /*  Check if colon exists in sub-string
+    *   if it exists, we have a designated port
+    *   else set port to default port 80
+    */
     char* port_substring = strstr(sub, ":");
     if(port_substring != NULL){
         int x = 1;
@@ -82,11 +92,6 @@ void parse_uri(char *uri, char *hostname, char * path, int *port){
         port = 80;
 
     printf("PORT: %d\n", port);
-
-    //printf("hostname: %s\n", hostname);
-
-
-
 
 }
 
