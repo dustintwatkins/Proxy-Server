@@ -14,20 +14,22 @@ static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64;
 
 void handler(int connection_fd);
 void parse_uri(char *uri, char *hostname, char *path, int *port);
+void build_http_header(char *http_header, char *hostname, char *path, int port, rio_t *rio_client);
 
 void handler(int connection_fd){
 
-    //int dest_server_fd;                    //The destination server file descriptor
+    int dest_server_fd;                                                         //The destination server file descriptor
     char buf[MAXLINE];
     char method[MAXLINE];
     char uri[MAXLINE];
-    char version[MAXLINE];                   //Will be changing version to 1.0 always
+    char version[MAXLINE];                                                      //Will be changing version to 1.0 always
     char hostname[MAXLINE];
     char path[MAXLINE];
+    char http_header[MAXLINE];
     int port;
 
-    rio_t rio_client;                        //Client rio_t
-    //rio_t rio_server;                      //Server rio_t
+    rio_t rio_client;                                                           //Client rio_t
+    rio_t rio_server;                                                           //Server rio_t
 
     Rio_readinitb(&rio_client, connection_fd);
     Rio_readlineb(&rio_client, buf, MAXLINE);
@@ -50,34 +52,61 @@ void handler(int connection_fd){
     memset(&path[0], 0, sizeof(path));
     memset(&hostname[0], 0, sizeof(hostname));
 
+    //Parse the URI to get hostname, path and port
     parse_uri(uri, hostname, path, &port);
 
-    printf("PATH: %s\n", path);
-    printf("PORT: %d\n", port);
-    printf("HOSTNAME: %s\n", hostname);
+    // printf("PATH: %s\n", path);
+    // printf("PORT: %d\n", port);
+    // printf("HOSTNAME: %s\n", hostname);
+
+
+    //Build the http header from the parsed_uri to send to server
+    build_http_header(http_header, hostname, path, port, &rio_client);
+    printf("%s\n", http_header);
+
+    //Establish connection to destination server
+    char port_string[100];
+    sprintf(port_string, "%d", port);
+    dest_server_fd = Open_clientfd(hostname, port_string);
+    if(dest_server_fd < 0){
+        printf("Connection to %s on port %d unsuccessful\n", hostname, port);
+        return;
+    }
+
+    printf("CONNECTED!\n");
+
+    Rio_readinitb(&rio_server, dest_server_fd);
+    rio_writen(dest_server_fd, http_header, strlen(http_header));
+
+    size_t size;
+    while((size = Rio_readlineb(&rio_server, buf, MAXLINE)) != 0){
+            printf("Received %zu bytes...\n", size);
+            printf("Now forwarding...\n");
+            rio_writen(connection_fd, buf, size);
+    }
+    Close(dest_server_fd);
 
 }
 
 
 void parse_uri(char *uri, char *hostname, char *path, int *port){
 
-//  char* end_hostname;
     char* sub_str1 = strstr(uri, "//");
     char my_sub[MAXLINE];
     memset(&my_sub[0], 0, sizeof(my_sub));
     char* sub = my_sub;
-    char num[5] = {'\0', '\0', '\0', '\0', '\0'};
+    char num[MAXLINE];
     int hostname_set = 0;
 
-    *port = 80;                                                    //Default port is 80
+    *port = 80;                                                                 //Default port is 80
 
     if(sub_str1 != NULL){
-        int i = 2;                                                 //advance past the '//'
+        int i = 2;                                                              //advance past the '//'
         int j = 0;
         for(; i < strlen(sub_str1); i++)
             sub[j++] = sub_str1[i];
     }
-    //printf("sub: %s\n", sub);                                      //sub contains everything after http://
+    //printf("sub: %s\n", sub);                                                 //sub contains everything after http://
 
     /*  Check if colon exists in sub-string
     *   if it exists, we have a designated port
@@ -87,12 +116,12 @@ void parse_uri(char *uri, char *hostname, char *path, int *port){
     if(port_substring != NULL){
         int x = 1;
         int y = 0;
-        while(1){                                                  //Get port numbers
+        while(1){                                                               //Get port numbers
             if(port_substring[x] == '/')
                 break;
             num[y++] = port_substring[x++];
         }
-        *port = atoi(num);                                        //Set port
+        *port = atoi(num);                                                      //Set port
 
         x = 0;
         y = 0;
@@ -103,6 +132,7 @@ void parse_uri(char *uri, char *hostname, char *path, int *port){
         }
         hostname_set = 1;
     }
+    printf("PORT: %d\n", *port);
 
     //Get Path
     char *sub_path = strstr(sub, "/");
@@ -115,8 +145,8 @@ void parse_uri(char *uri, char *hostname, char *path, int *port){
                 break;
             path[a++] = sub_path[b++];
         }
-        if(!hostname_set){                                      //If the hostname is not set
-            a = 0;                                              //Set it...
+        if(!hostname_set){                                                      //If the hostname is not set
+            a = 0;                                                              //Set it...
             b = 0;
             while(1){
                 if(sub[b] == '/')
@@ -125,6 +155,45 @@ void parse_uri(char *uri, char *hostname, char *path, int *port){
             }
         }
     }
+}
+
+void build_http_header(char *http_header, char *hostname, char *path, int port, rio_t *rio_client){
+
+    char* carriage_new = "\r\n";
+
+    char request_header[MAXLINE];
+    char *request_title = "GET ";
+    char *request_end = " HTTP/1.0";
+    sprintf(request_header, "%s%s%s%s", request_title, path, request_end, carriage_new);
+
+    char host_header[MAXLINE];
+    char *host_title = "Host: ";
+    sprintf(host_header, "%s%s%s", host_title, hostname, carriage_new);
+//    printf("%s\n", host_header);
+
+    char user_agent_header[MAXLINE];
+    sprintf(user_agent_header, "%s", user_agent_hdr);
+//    printf("%s\n", user_agent_header);
+
+    char connection_header[MAXLINE];
+    char *connection_title = "Connection: ";
+    char *connection_field = "close";
+    sprintf(connection_header, "%s%s%s", connection_title, connection_field, carriage_new);
+//    printf("%s\n", connection_header);
+
+    char proxy_connection_header[MAXLINE];
+    char *proxy_title = "Proxy-Connection: ";
+    char *proxy_field = "close";
+    sprintf(proxy_connection_header, "%s%s%s", proxy_title, proxy_field, carriage_new);
+//    printf("%s\n", proxy_connection_header);
+
+    //NEED TO ADD ADDITIONAL REQUEST HEADERS UNCHANGED FROM ORIGINAL REQUEST
+
+    sprintf(http_header, "%s%s%s%s%s%s",    request_header, host_header,
+                                            user_agent_header, connection_header,
+                                            proxy_connection_header, carriage_new);
+
+    //printf("%s\n", http_header);
 }
 
 int main(int argc, char** argv)
