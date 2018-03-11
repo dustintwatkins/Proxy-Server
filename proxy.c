@@ -17,84 +17,114 @@ void parse_uri(char *uri, char *hostname, char *path, int *port);
 
 void handler(int connection_fd){
 
-    //int dest_server_fd;                     //The destination server file descriptor
+    //int dest_server_fd;                    //The destination server file descriptor
     char buf[MAXLINE];
-    char type[MAXLINE];
+    char method[MAXLINE];
     char uri[MAXLINE];
-    char version[MAXLINE];                 //Will be changing version to 1.0 always
+    char version[MAXLINE];                   //Will be changing version to 1.0 always
     char hostname[MAXLINE];
     char path[MAXLINE];
     int port;
 
-    rio_t rio_client;                      //Client rio_t
+    rio_t rio_client;                        //Client rio_t
     //rio_t rio_server;                      //Server rio_t
 
     Rio_readinitb(&rio_client, connection_fd);
     Rio_readlineb(&rio_client, buf, MAXLINE);
-    sscanf(buf,"%s %s %s", type, uri, version);
+    sscanf(buf,"%s %s %s", method, uri, version);
 
-    printf("TYPE: %s\n", type);
-    printf("URI: %s\n", uri);
-    printf("VERSION: %s\n", version);
+    // printf("TYPE: %s\n", type);
+    // printf("URI: %s\n", uri);
+    // printf("VERSION: %s\n", version);
 
+    if(strcasecmp(method, "GET")){
+        printf("Proxy server only implements GET method\n");
+        return;
+    }
     /*  PARSE_URI
     *   get the hostname
     *   check if desired port is input or set to default port 80
     *   get the path from URI
     */
+
+    memset(&path[0], 0, sizeof(path));
+    memset(&hostname[0], 0, sizeof(hostname));
+
     parse_uri(uri, hostname, path, &port);
 
-
+    printf("PATH: %s\n", path);
+    printf("PORT: %d\n", port);
+    printf("HOSTNAME: %s\n", hostname);
 
 }
 
 
-void parse_uri(char *uri, char *hostname, char * path, int *port){
+void parse_uri(char *uri, char *hostname, char *path, int *port){
 
-    //printf("URI: %s\n", uri);
-
-//   char* end_hostname;
+//  char* end_hostname;
     char* sub_str1 = strstr(uri, "//");
     char my_sub[MAXLINE];
+    memset(&my_sub[0], 0, sizeof(my_sub));
     char* sub = my_sub;
     char num[5] = {'\0', '\0', '\0', '\0', '\0'};
+    int hostname_set = 0;
+
+    *port = 80;                                                    //Default port is 80
 
     if(sub_str1 != NULL){
-        int i = 2;                                                      //advance past the '//'
+        int i = 2;                                                 //advance past the '//'
         int j = 0;
         for(; i < strlen(sub_str1); i++)
             sub[j++] = sub_str1[i];
     }
-    printf("sub: %s\n", sub);                                      //sub contains everything after http://
-
-    //Get Path
-    char *sub_path = strstr(sub, "/");
-    if(sub_path == NULL)
-        sub_path = "/";
-    path = sub_path;
-    printf("PATH: %s\n", path);
-
+    //printf("sub: %s\n", sub);                                      //sub contains everything after http://
 
     /*  Check if colon exists in sub-string
     *   if it exists, we have a designated port
-    *   else set port to default port 80
+    *   else port is already set to default port 80
     */
     char* port_substring = strstr(sub, ":");
     if(port_substring != NULL){
         int x = 1;
         int y = 0;
-        while(1){
+        while(1){                                                  //Get port numbers
             if(port_substring[x] == '/')
                 break;
             num[y++] = port_substring[x++];
         }
-        *port = atoi(num);
+        *port = atoi(num);                                        //Set port
+
+        x = 0;
+        y = 0;
+        while(1){
+            if(sub[y] == ':')
+                break;
+            hostname[x++] = sub[y++];
+        }
+        hostname_set = 1;
     }
-    else
-        *port = 80;                                                  //Default port 80
 
-    printf("PORT: %d\n", *port);
-
+    //Get Path
+    char *sub_path = strstr(sub, "/");
+    //printf("sub_path: %s\n", sub_path);
+    if(sub_path != NULL){
+        int a = 0;
+        int b = 0;
+        while(1){
+            if(sub_path[b] == '\0')
+                break;
+            path[a++] = sub_path[b++];
+        }
+        if(!hostname_set){                                      //If the hostname is not set
+            a = 0;                                              //Set it...
+            b = 0;
+            while(1){
+                if(sub[b] == '/')
+                    break;
+                hostname[a++] = sub[b++];
+            }
+        }
+    }
 }
 
 int main(int argc, char** argv)
