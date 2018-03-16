@@ -28,8 +28,7 @@ void handler(int connection_fd){
     char path[MAXLINE];
     char http_header[MAXLINE];
     int port;
-    //char** headers = (char**)malloc(MAXLINE * sizeof(char*));
-    //char** headers = calloc(5, sizeof(char*));
+
     rio_t rio_client;                                                           //Client rio_t
     rio_t rio_server;                                                           //Server rio_t
 
@@ -83,8 +82,7 @@ void handler(int connection_fd){
 
     //Build the http header from the parsed_uri to send to server
     build_http_header(http_header, hostname, path, port, &rio_client);
-    //build_http_header(http_header, hostname, path, port, &rio_client, headers);
-    printf("%s\n", http_header);
+    //printf("%s\n", http_header);
 
     //Establish connection to destination server
     char port_string[100];
@@ -237,7 +235,7 @@ void build_http_header(char *http_header, char *hostname, char *path, int port, 
                              prox_header, user_agent_hdr, other_headers,
                              carriage_return);
     printf("HTTP_HEADERS: %s\n", http_header);
-    
+
 }
 
 //Thread routine (also page 953)
