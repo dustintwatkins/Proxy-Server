@@ -14,8 +14,7 @@ static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64;
 
 void handler(int connection_fd);
 void parse_uri(char *uri, char *hostname, char *path, int *port);
-void build_http_header(char *http_header, char *hostname, char *path, int port, rio_t *rio_client, char** headers);
-char** check_other_headers(char** headers);
+void build_http_header(char *http_header, char *hostname, char *path, int port, rio_t *rio_client);
 void *thread(void * vargp);                                                     //Notes for threading pg 953 txtbook
 
 void handler(int connection_fd){
@@ -29,7 +28,7 @@ void handler(int connection_fd){
     char path[MAXLINE];
     char http_header[MAXLINE];
     int port;
-    char** headers = (char**)malloc(MAXLINE * sizeof(char*));
+    //char** headers = (char**)malloc(MAXLINE * sizeof(char*));
     //char** headers = calloc(5, sizeof(char*));
     rio_t rio_client;                                                           //Client rio_t
     rio_t rio_server;                                                           //Server rio_t
@@ -37,14 +36,9 @@ void handler(int connection_fd){
     Rio_readinitb(&rio_client, connection_fd);
     Rio_readlineb(&rio_client, buf, MAXLINE);
     sscanf(buf,"%s %s %s", method, uri, version);
-
-    // while(Rio_readlineb(&rio_client, buf, MAXLINE) > 0 ){
-    //     printf("%s,\n", buf);
-    // }
-
     int idx = 0;
 
-    while(1){
+    /*while(1){
         Rio_readlineb(&rio_client, buf, MAXLINE);
         if((buf[0] == '\r') && (buf[1] == '\n'))
             break;
@@ -60,7 +54,7 @@ void handler(int connection_fd){
             break;
         printf("%d: %s\n", idx, headers[idx]);
         idx++;
-    }
+    }*/
 
     // printf("TYPE: %s\n", type);
     // printf("URI: %s\n", uri);
@@ -88,7 +82,8 @@ void handler(int connection_fd){
     // printf("HOSTNAME: %s\n", hostname);
 
     //Build the http header from the parsed_uri to send to server
-    build_http_header(http_header, hostname, path, port, &rio_client, headers);
+    build_http_header(http_header, hostname, path, port, &rio_client);
+    //build_http_header(http_header, hostname, path, port, &rio_client, headers);
     printf("%s\n", http_header);
 
     //Establish connection to destination server
@@ -185,56 +180,64 @@ void parse_uri(char *uri, char *hostname, char *path, int *port){
     }
 }
 
-char** check_other_headers(char** headers){
-    char** other_headers = (char**)malloc(MAXLINE * sizeof(char*));
-    int i = 0;
-    if(!strcmp(headers[i], "GET / HTTP/1.0"))
-        return NULL;
-    return NULL;
+void build_http_header(char *http_header, char *hostname, char *path, int port, rio_t *rio_client){
 
-}
-
-void build_http_header(char *http_header, char *hostname, char *path, int port, rio_t *rio_client, char** headers){
-
-    char* carriage_new = "\r\n";
-
+    char buf[MAXLINE];
     char request_header[MAXLINE];
-    char *request_title = "GET ";
-    char *request_end = " HTTP/1.0";
-    sprintf(request_header, "%s%s%s%s", request_title, path, request_end, carriage_new);
-
     char host_header[MAXLINE];
-    char *host_title = "Host: ";
-    sprintf(host_header, "%s%s%s", host_title, hostname, carriage_new);
-//    printf("%s\n", host_header);
+    char other_headers[MAXLINE];
 
-    char user_agent_header[MAXLINE];
-    sprintf(user_agent_header, "%s", user_agent_hdr);
-//    printf("%s\n", user_agent_header);
+    char *connection_header = "Connection: close\r\n";
+    char *prox_header = "Proxy-Connection: close\r\n";
+    char *host_header_format = "Host: %s\r\n";
+    char *request_header_format = "GET %s HTTP/1.0\r\n";
+    char *carriage_return = "\r\n";
 
-    char connection_header[MAXLINE];
-    char *connection_title = "Connection: ";
-    char *connection_field = "close";
-    sprintf(connection_header, "%s%s%s", connection_title, connection_field, carriage_new);
-//    printf("%s\n", connection_header);
+    char *connection_key = "Connection";
+    char *user_agent_key= "User-Agent";
+    char *proxy_connection_key = "Proxy-Connection";
+    char *host_key = "Host";
 
-    char proxy_connection_header[MAXLINE];
-    char *proxy_title = "Proxy-Connection: ";
-    char *proxy_field = "close";
-    sprintf(proxy_connection_header, "%s%s%s", proxy_title, proxy_field, carriage_new);
-//    printf("%s\n", proxy_connection_header);
+    int connection_len = strlen(connection_key);
+    int user_len = strlen(user_agent_key);
+    int proxy_len = strlen(proxy_connection_key);
+    int host_len = strlen(host_key);
 
-    //NEED TO ADD ADDITIONAL REQUEST HEADERS UNCHANGED FROM ORIGINAL REQUEST
+    sprintf(request_header, request_header_format, path);
+    printf("request_header: %s\n", request_header);
 
-    sprintf(http_header, "%s%s%s%s%s%s",    request_header, host_header,
-                                            user_agent_header, connection_header,
-                                            proxy_connection_header, carriage_new);
+    while(Rio_readlineb(rio_client, buf, MAXLINE) > 0){
 
+            //Check for EOF first
+            if(!strcmp(buf, carriage_return))
+                break;
 
+            //Check for host_key in buf
+            //strncasecmp is not case sensitive
+            //compares host_len chars in buf to host_key
+            if(!strncasecmp(buf, host_key, host_len)){
+                strcpy(host_header, buf);
+                printf("HOST_HEADER: %s\n", host_header);
+                continue;
+            }
 
-    //check_other_headers(headers);
-    printf("printing headers\n");
-    printf("%s\n", http_header);
+            //Check for any headers that are not..
+            //connection,
+            if( !strncasecmp(buf, connection_key, connection_len) &&
+                !strncasecmp(buf, proxy_connection_key, proxy_len) &&
+                !strncasecmp(buf, user_agent_key, user_len)){
+                    strcat(other_headers, buf);
+                }
+    }
+
+    if(strlen(host_header) == 0)
+        sprintf(host_header, host_header_format, hostname);
+
+    sprintf(http_header, "%s%s%s%s%s%s%s", request_header, host_header, connection_header,
+                             prox_header, user_agent_hdr, other_headers,
+                             carriage_return);
+    printf("HTTP_HEADERS: %s\n", http_header);
+    
 }
 
 //Thread routine (also page 953)
