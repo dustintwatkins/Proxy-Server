@@ -14,7 +14,9 @@ static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64;
 
 void handler(int connection_fd);
 void parse_uri(char *uri, char *hostname, char *path, int *port);
-void build_http_header(char *http_header, char *hostname, char *path, int port, rio_t *rio_client);
+void build_http_header(char *http_header, char *hostname, char *path, int port, rio_t *rio_client, char** headers);
+char** check_other_headers(char** headers);
+void *thread(void * vargp);                                                     //Notes for threading pg 953 txtbook
 
 void handler(int connection_fd){
 
@@ -27,13 +29,38 @@ void handler(int connection_fd){
     char path[MAXLINE];
     char http_header[MAXLINE];
     int port;
-
+    char** headers = (char**)malloc(MAXLINE * sizeof(char*));
+    //char** headers = calloc(5, sizeof(char*));
     rio_t rio_client;                                                           //Client rio_t
     rio_t rio_server;                                                           //Server rio_t
 
     Rio_readinitb(&rio_client, connection_fd);
     Rio_readlineb(&rio_client, buf, MAXLINE);
     sscanf(buf,"%s %s %s", method, uri, version);
+
+    // while(Rio_readlineb(&rio_client, buf, MAXLINE) > 0 ){
+    //     printf("%s,\n", buf);
+    // }
+
+    int idx = 0;
+
+    while(1){
+        Rio_readlineb(&rio_client, buf, MAXLINE);
+        if((buf[0] == '\r') && (buf[1] == '\n'))
+            break;
+        //printf("%s", buf);
+        headers[idx] = malloc(MAXLINE * sizeof(char*));
+        strcpy(headers[idx++], buf);
+    }
+
+    // This is a printer for all the headers that are passed in
+    idx = 0;
+    while(1){
+        if(headers[idx] == NULL)
+            break;
+        printf("%d: %s\n", idx, headers[idx]);
+        idx++;
+    }
 
     // printf("TYPE: %s\n", type);
     // printf("URI: %s\n", uri);
@@ -43,6 +70,7 @@ void handler(int connection_fd){
         printf("Proxy server only implements GET method\n");
         return;
     }
+
     /*  PARSE_URI
     *   get the hostname
     *   check if desired port is input or set to default port 80
@@ -59,9 +87,8 @@ void handler(int connection_fd){
     // printf("PORT: %d\n", port);
     // printf("HOSTNAME: %s\n", hostname);
 
-
     //Build the http header from the parsed_uri to send to server
-    build_http_header(http_header, hostname, path, port, &rio_client);
+    build_http_header(http_header, hostname, path, port, &rio_client, headers);
     printf("%s\n", http_header);
 
     //Establish connection to destination server
@@ -75,16 +102,17 @@ void handler(int connection_fd){
 
     printf("CONNECTED!\n");
 
+    //Send and receive info to and from destination server
     Rio_readinitb(&rio_server, dest_server_fd);
     rio_writen(dest_server_fd, http_header, strlen(http_header));
 
     size_t size;
     while((size = Rio_readlineb(&rio_server, buf, MAXLINE)) != 0){
-            printf("Received %zu bytes...\n", size);
-            printf("Now forwarding...\n");
+            //printf("Received %zu bytes...\n", size);
+            //printf("Now forwarding...\n");
             rio_writen(connection_fd, buf, size);
     }
-    Close(dest_server_fd);
+    //Close(dest_server_fd); Used for part 1
 
 }
 
@@ -132,7 +160,7 @@ void parse_uri(char *uri, char *hostname, char *path, int *port){
         }
         hostname_set = 1;
     }
-    printf("PORT: %d\n", *port);
+    //printf("PORT: %d\n", *port);
 
     //Get Path
     char *sub_path = strstr(sub, "/");
@@ -157,7 +185,16 @@ void parse_uri(char *uri, char *hostname, char *path, int *port){
     }
 }
 
-void build_http_header(char *http_header, char *hostname, char *path, int port, rio_t *rio_client){
+char** check_other_headers(char** headers){
+    char** other_headers = (char**)malloc(MAXLINE * sizeof(char*));
+    int i = 0;
+    if(!strcmp(headers[i], "GET / HTTP/1.0"))
+        return NULL;
+    return NULL;
+
+}
+
+void build_http_header(char *http_header, char *hostname, char *path, int port, rio_t *rio_client, char** headers){
 
     char* carriage_new = "\r\n";
 
@@ -193,7 +230,21 @@ void build_http_header(char *http_header, char *hostname, char *path, int port, 
                                             user_agent_header, connection_header,
                                             proxy_connection_header, carriage_new);
 
-    //printf("%s\n", http_header);
+
+
+    //check_other_headers(headers);
+    printf("printing headers\n");
+    printf("%s\n", http_header);
+}
+
+//Thread routine (also page 953)
+//Page 972 another way of doing threads
+void *thread(void *vargp){
+    int conn_fd = (int)vargp;
+    Pthread_detach(pthread_self());
+    handler(conn_fd);
+    Close(conn_fd);
+    return NULL;
 }
 
 int main(int argc, char** argv)
@@ -202,6 +253,7 @@ int main(int argc, char** argv)
     socklen_t client_len;
     struct sockaddr_storage clientaddr;
     char client_hostname[MAXLINE], client_port[MAXLINE];
+    pthread_t thread_id;
 
     //Check Number of parameters passed in from cmd line
     if (argc != 2){
@@ -220,10 +272,11 @@ int main(int argc, char** argv)
 
         Getnameinfo((SA *) &clientaddr, client_len, client_hostname, MAXLINE, client_port, MAXLINE, 0);
         printf("Connected to (%s, %s)\n", client_hostname, client_port);
+        Pthread_create(&thread_id, NULL, thread, (void *) connection_fd);
 
-        handler(connection_fd);
+        //handler(connection_fd);                                               //Used in part 1
 
-        Close(connection_fd);
+        //Close(connection_fd);                                                 //Used in part 1
     }
     exit(0);
 
