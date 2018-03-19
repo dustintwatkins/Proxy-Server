@@ -20,12 +20,12 @@ void *thread(void * vargp);                                                     
 void handler(int connection_fd){
 
     int dest_server_fd;                                                         //The destination server file descriptor
-    char buf[MAXLINE];
-    char method[MAXLINE];
-    char uri[MAXLINE];
+    char buf[MAXLINE];                                                          //Buffer to read from
+    char method[MAXLINE];                                                       //Method, should be "GET" we don't handle anything else
+    char uri[MAXLINE];                                                          //The address we are going to i.e(https://www.example.com/)
     char version[MAXLINE];                                                      //Will be changing version to 1.0 always
-    char hostname[MAXLINE];
-    char path[MAXLINE];
+    char hostname[MAXLINE];                                                     //i.e. www.example.com
+    char path[MAXLINE];                                                         //destinationin server i.e /home/index.html
     char http_header[MAXLINE];
     int port;
 
@@ -33,11 +33,12 @@ void handler(int connection_fd){
     rio_t rio_server;                                                           //Server rio_t
 
     Rio_readinitb(&rio_client, connection_fd);
-    Rio_readlineb(&rio_client, buf, MAXLINE);
+    Rio_readlineb(&rio_client, buf, MAXLINE);                                   //Read first line
     sscanf(buf,"%s %s %s", method, uri, version);
-    int idx = 0;
 
-    /*while(1){
+    /*
+    int idx = 0;
+    while(1){
         Rio_readlineb(&rio_client, buf, MAXLINE);
         if((buf[0] == '\r') && (buf[1] == '\n'))
             break;
@@ -59,7 +60,7 @@ void handler(int connection_fd){
     // printf("URI: %s\n", uri);
     // printf("VERSION: %s\n", version);
 
-    if(strcasecmp(method, "GET")){
+    if(strcasecmp(method, "GET")){                                              //If somethinge besides "GET", disregard
         printf("Proxy server only implements GET method\n");
         return;
     }
@@ -70,8 +71,8 @@ void handler(int connection_fd){
     *   get the path from URI
     */
 
-    memset(&path[0], 0, sizeof(path));
-    memset(&hostname[0], 0, sizeof(hostname));
+    memset(&path[0], 0, sizeof(path));                                          //Reset the memeory of path
+    memset(&hostname[0], 0, sizeof(hostname));                                  //Reset the memory of hostname
 
     //Parse the URI to get hostname, path and port
     parse_uri(uri, hostname, path, &port);
@@ -106,9 +107,7 @@ void handler(int connection_fd){
             rio_writen(connection_fd, buf, size);
     }
     //Close(dest_server_fd); Used for part 1
-
 }
-
 
 void parse_uri(char *uri, char *hostname, char *path, int *port){
 
@@ -219,8 +218,7 @@ void build_http_header(char *http_header, char *hostname, char *path, int port, 
                 continue;
             }
 
-            //Check for any headers that are not..
-            //connection,
+            //Check for any headers that are other_headers
             if( !strncasecmp(buf, connection_key, connection_len) &&
                 !strncasecmp(buf, proxy_connection_key, proxy_len) &&
                 !strncasecmp(buf, user_agent_key, user_len)){
@@ -228,14 +226,15 @@ void build_http_header(char *http_header, char *hostname, char *path, int port, 
                 }
     }
 
-    if(strlen(host_header) == 0)
+    if(strlen(host_header) == 0)                                                //If host header is not set, set it here
         sprintf(host_header, host_header_format, hostname);
 
+    //Build the http header string
     sprintf(http_header, "%s%s%s%s%s%s%s", request_header, host_header, connection_header,
                              prox_header, user_agent_hdr, other_headers,
                              carriage_return);
-    printf("HTTP_HEADERS: %s\n", http_header);
 
+    //printf("HTTP_HEADERS: %s\n", http_header);
 }
 
 //Thread routine (also page 953)
@@ -276,11 +275,9 @@ int main(int argc, char** argv)
         Pthread_create(&thread_id, NULL, thread, (void *) connection_fd);
 
         //handler(connection_fd);                                               //Used in part 1
-
         //Close(connection_fd);                                                 //Used in part 1
     }
     exit(0);
-
 
     printf("%s", user_agent_hdr);
     return 0;
