@@ -89,6 +89,7 @@ void handler(int connection_fd){
     char port_string[100];
     sprintf(port_string, "%d", port);
     dest_server_fd = Open_clientfd(hostname, port_string);
+
     if(dest_server_fd < 0){
         printf("Connection to %s on port %d unsuccessful\n", hostname, port);
         return;
@@ -102,7 +103,7 @@ void handler(int connection_fd){
 
     size_t size;
     while((size = Rio_readlineb(&rio_server, buf, MAXLINE)) != 0){
-            //printf("Received %zu bytes...\n", size);
+            printf("Received %zu bytes...\n", size);
             //printf("Now forwarding...\n");
             rio_writen(connection_fd, buf, size);
     }
@@ -234,7 +235,7 @@ void build_http_header(char *http_header, char *hostname, char *path, int port, 
                              prox_header, user_agent_hdr, other_headers,
                              carriage_return);
 
-    //printf("HTTP_HEADERS: %s\n", http_header);
+    printf("HTTP_HEADERS: %s\n", http_header);
 }
 
 //Thread routine (also page 953)
