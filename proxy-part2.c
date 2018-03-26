@@ -1,14 +1,10 @@
 #include <stdio.h>
 #include "csapp.h"
 #include <ctype.h>
-#include "sbuf.h"
 
 /* Recommended max cache and object sizes */
 #define MAX_CACHE_SIZE 1049000
 #define MAX_OBJECT_SIZE 102400
-#define NTHREADS 4
-#define SBUFSIZE 16
-
 
 /* You won't lose style points for including this long line in your code */
 static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
@@ -19,9 +15,7 @@ static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64;
 void handler(int connection_fd);
 void parse_uri(char *uri, char *hostname, char *path, int *port);
 void build_http_header(char *http_header, char *hostname, char *path, int port, rio_t *rio_client);
-void *thread(void * vargp);
-
-sbuf_t sbuf;                                                 //Notes for threading pg 953 txtbook
+void *thread(void * vargp);                                                     //Notes for threading pg 953 txtbook
 
 void handler(int connection_fd){
 
@@ -41,6 +35,30 @@ void handler(int connection_fd){
     Rio_readinitb(&rio_client, connection_fd);
     Rio_readlineb(&rio_client, buf, MAXLINE);                                   //Read first line
     sscanf(buf,"%s %s %s", method, uri, version);
+
+    /*
+    int idx = 0;
+    while(1){
+        Rio_readlineb(&rio_client, buf, MAXLINE);
+        if((buf[0] == '\r') && (buf[1] == '\n'))
+            break;
+        //printf("%s", buf);
+        headers[idx] = malloc(MAXLINE * sizeof(char*));
+        strcpy(headers[idx++], buf);
+    }
+
+    // This is a printer for all the headers that are passed in
+    idx = 0;
+    while(1){
+        if(headers[idx] == NULL)
+            break;
+        printf("%d: %s\n", idx, headers[idx]);
+        idx++;
+    }*/
+
+    // printf("TYPE: %s\n", type);
+    // printf("URI: %s\n", uri);
+    // printf("VERSION: %s\n", version);
 
     if(strcasecmp(method, "GET")){                                              //If somethinge besides "GET", disregard
         printf("Proxy server only implements GET method\n");
@@ -223,12 +241,11 @@ void build_http_header(char *http_header, char *hostname, char *path, int port, 
 //Thread routine (also page 953)
 //Page 972 another way of doing threads
 void *thread(void *vargp){
+    int conn_fd = (int)vargp;
     Pthread_detach(pthread_self());
-    while(1){
-        int connfd = sbuf_remove(&sbuf);
-        handler(connfd);
-        Close(connfd);
-    }
+    handler(conn_fd);
+    Close(conn_fd);
+    return NULL;
 }
 
 int main(int argc, char** argv)
@@ -245,17 +262,10 @@ int main(int argc, char** argv)
         exit(0);
     }
 
-    sbuf_init(&sbuf, SBUFSIZE);
-
     /*  Listen for incoming connections on port
     *   set listen_fd to return fd of Open_listenfd
     */
     listen_fd = Open_listenfd(argv[1]);
-
-    //Prethreading creating workiner threads
-    int i;
-    for(i = 0; i < NTHREADS; i++)
-        Pthread_create(&thread_id, NULL, thread, NULL);
 
     while(1){
         client_len = sizeof(struct sockaddr_storage);
@@ -263,10 +273,14 @@ int main(int argc, char** argv)
 
         Getnameinfo((SA *) &clientaddr, client_len, client_hostname, MAXLINE, client_port, MAXLINE, 0);
         printf("Connected to (%s, %s)\n", client_hostname, client_port);
-        sbuf_insert(&sbuf, connection_fd);
+        Pthread_create(&thread_id, NULL, thread, (void *) connection_fd);
+
+        //handler(connection_fd);                                               //Used in part 1
+        //Close(connection_fd);                                                 //Used in part 1
     }
     exit(0);
 
     printf("%s", user_agent_hdr);
     return 0;
 }
+

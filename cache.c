@@ -1,10 +1,11 @@
-#ifndef MARJ_CACHE_H
-#define MARJ_CACHE_H
+#include "cache.h"
 
-#include <stdlib.h>
-#include "csapp.h"
 
-typedef struct CachedItem CachedItem;
+typedef struct {
+  size_t size;
+  CachedItem* first;
+  CachedItem* last;
+} CacheList;
 
 struct CachedItem {
   char url[MAXLINE];
@@ -14,17 +15,18 @@ struct CachedItem {
   CachedItem *next;
 };
 
-typedef struct {
-  size_t size;
-  CachedItem* first;
-  CachedItem* last;
-} CacheList;
-
-extern void cache_init(CacheList *list);
+extern void cache_init(CacheList *list){
+  list->size = 0;
+  list->first = NULL;
+  list->last = NULL;
+}
 //size = 0
 //first = NULL
 //last = NULL
-extern void cache_URL(char *URL, void *item, size_t size, CacheList *list);
+
+extern void cache_URL(char *URL, void *item, size_t size, CacheList *list){
+
+}
 //Check size, see if it fits in parameters 1mib
 //Check space of linked list, evict if necessary(while needed)
 //malloc cached item (sizeof(CachedItem))
@@ -47,7 +49,7 @@ extern CachedItem *find(char *URL, CacheList *list);
 //extern CachedItem get_cache(char *URL, CacheList *list);
 
 extern void move_to_front(char *URL, CacheList *list);
-//go to item and check if its there, if not rerturn
+//go to item and check if its there, if not return
 //if url == *first->url
 //  return
 //if *first == *last
@@ -69,6 +71,13 @@ extern void move_to_front(char *URL, CacheList *list);
 
 extern void print_URLs(CacheList *list);
 
-extern void cache_destruct(CacheList *list);
+extern void cache_destruct(CacheList *list){
+  CachedItem curr = list->last;
+  while(curr->prev != NULL){
+    curr = curr->prev;
+    free(curr);
+  }
+  free(curr);
+}
 //Free the cache, start at end then go prev and free as you go
 #endif
