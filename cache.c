@@ -1,8 +1,10 @@
 #include "cache.h"
 #include <assert.h>
 
-#define MAX_CACHE_SIZE 10000
-#define MAX_OBJECT_SIZE 1000
+#define MAX_CACHE_SIZE 1049000
+#define MAX_OBJECT_SIZE 102400
+
+
 
 void cache_init(CacheList *list){
   list->size = 0;
@@ -17,7 +19,7 @@ void cache_URL(char *URL, void *item, size_t size, CacheList *list){
   }
 
   //check space in linked list, evict while necessary
-  while(list->size + size > MAX_CACHE_SIZE){
+  while((list->size + size) > MAX_CACHE_SIZE){
     evict(list);
   }
 
@@ -26,22 +28,21 @@ void cache_URL(char *URL, void *item, size_t size, CacheList *list){
   CachedItem* cached_item = (CachedItem*) malloc(sizeof(struct CachedItem));
 
   strcpy(cached_item->url, URL);
-
   cached_item->item_p = item;
   cached_item->size = size;
 
   //If list is empty, set first and last item in list to item
   if(list->first == NULL){
-    list->first = item;
-    list->last = item;
+    list->first = cached_item;
+    list->last = cached_item;
   }
   else{
     //Non empty list
     //reorder so item is first and original first is now next
-    list->first->prev = item;
+    list->first->prev = cached_item;
     cached_item->next = list->first;
     cached_item->prev = NULL;
-    list->first = item;
+    list->first = cached_item;
   }
 
   return;
@@ -84,20 +85,31 @@ void evict(CacheList *list){
 //assign *last to *prev
 //update list size -= last_size
 
-CachedItem *find(char *URL, CacheList *list){
+CachedItem* find(char *URL, CacheList *list){
   //list is empty, return NULL
-  if(list->size < 1)
-    return NULL;
 
-  //Check if the last item in list is it
-  if(!strcmp(list->last->url, URL))
-    return list->last;
+  if(list->size > 0){
+    if(strcmp(list->first->url, URL) == 0){
+      return list->first;
+    }
+    //Check if the last item in list is it
+    if(strcmp(list->last->url, URL) == 0){
+      return list->last;
+    }
 
-  CachedItem* temp = list->first;
-  while(temp != NULL){
-    if(!strcmp(temp->url, URL))
-      return temp;
-    temp = temp->next;
+    CachedItem* temp = list->first;
+    while(temp->next != NULL){
+      printf("here\n");
+      printf("temp->url %s\n", temp->url);
+      if(strcmp(temp->url, URL) != 0){
+        printf("advance\n");
+        temp = temp->next;
+        printf("after advance\n");
+      }
+      else{
+        return temp;
+      }
+    }
   }
   return NULL;
 }
@@ -128,20 +140,16 @@ void move_to_front(char *URL, CacheList *list){
     list->first = item;
     return;
   }
-
-  //its in the middle
-  item->prev->next = item->next;
-  item->next->prev = item->prev;
-  item->prev = NULL;
-  item->next = list->first;
-  list->first->prev = item;
-  list->first = item;
-  return;
-
-
-
-
-
+  else{
+    //its in the middle
+    item->prev->next = item->next;
+    item->next->prev = item->prev;
+    item->prev = NULL;
+    item->next = list->first;
+    list->first->prev = item;
+    list->first = item;
+    return;
+  }
 
 }
 //go to item and check if its there, if not return

@@ -1,15 +1,11 @@
 #include <stdio.h>
 #include "csapp.h"
 #include <ctype.h>
-#include "sbuf.h"
 #include "cache.h"
 
 /* Recommended max cache and object sizes */
 #define MAX_CACHE_SIZE 1049000
 #define MAX_OBJECT_SIZE 102400
-#define NTHREADS 4
-#define SBUFSIZE 16
-
 
 /* You won't lose style points for including this long line in your code */
 static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
@@ -23,16 +19,15 @@ void parse_uri(char *uri, char *hostname, char *path, int *port);
 void build_http_header(char *http_header, char *hostname, char *path, int port, rio_t *rio_client);
 void *thread(void * vargp);
 
-//TODO create CachedItem/ list
-sbuf_t sbuf;
-
-                                        //Notes for threading pg 953 txtbook
 CacheList* CACHE_LIST;
+                                                  //Notes for threading pg 953 txtbook
 
 void handler(int connection_fd){
 
     int dest_server_fd;                                                         //The destination server file descriptor
-    char buf[MAXLINE];                                                          //Buffer to read from
+    char buf[MAXLINE];
+    memset(&buf[0], 0, sizeof(buf));
+    char usrbuf[MAXLINE];                                                       //Buffer to read from
     char method[MAXLINE];                                                       //Method, should be "GET" we don't handle anything else
     char uri[MAXLINE];                                                          //The address we are going to i.e(https://www.example.com/)
     char version[MAXLINE];                                                      //Will be changing version to 1.0 always
@@ -53,6 +48,20 @@ void handler(int connection_fd){
         return;
     }
 
+    CachedItem* cached_item = find(buf, CACHE_LIST);
+    if(cached_item != NULL){
+      move_to_front(cached_item->url, CACHE_LIST);
+      size_t to_be_written = cached_item->size;
+      size_t written = 0;
+      char* item_buf = cached_item->item_p;
+      while((written = rio_writen(connection_fd, item_buf, to_be_written)) != written){
+        item_buf += written;
+        to_be_written -= written;
+      }
+      return;
+    }
+
+
     /*  PARSE_URI
     *   get the hostname
     *   check if desired port is input or set to default port 80
@@ -65,8 +74,9 @@ void handler(int connection_fd){
     //Parse the URI to get hostname, path and port
     parse_uri(uri, hostname, path, &port);
 
-    //TODO check if uri is in cache
-
+    // printf("PATH: %s\n", path);
+    // printf("PORT: %d\n", port);
+    // printf("HOSTNAME: %s\n", hostname);
 
     //Build the http header from the parsed_uri to send to server
     build_http_header(http_header, hostname, path, port, &rio_client);
@@ -88,11 +98,23 @@ void handler(int connection_fd){
     Rio_readinitb(&rio_server, dest_server_fd);
     rio_writen(dest_server_fd, http_header, sizeof(http_header));
 
-    size_t size;
-    while((size = Rio_readlineb(&rio_server, buf, MAXLINE)) != 0){
-            printf("Received %zu bytes...\n", size);
-            //printf("Now forwarding...\n");
-            rio_writen(connection_fd, buf, size);
+    size_t size = 0;
+    size_t total_bytes = 0;
+    char obj[MAX_OBJECT_SIZE];
+    while((size = rio_readlineb(&rio_server, usrbuf, MAXLINE)) != 0){
+            total_bytes += size;
+            rio_writen(connection_fd, usrbuf, size);
+            if(total_bytes < MAX_OBJECT_SIZE)
+              strcat(obj, usrbuf);
+    }
+
+    if(total_bytes < MAX_OBJECT_SIZE){
+      char* to_be_cached = (char*) malloc(total_bytes);
+      strcpy(to_be_cached, obj);
+      printf("to_be_cached:\n %s\n", to_be_cached);
+
+      cache_URL(buf, to_be_cached, total_bytes, CACHE_LIST);
+
     }
     //Close(dest_server_fd); Used for part 1
 }
@@ -228,22 +250,18 @@ void build_http_header(char *http_header, char *hostname, char *path, int port, 
 //Thread routine (also page 953)
 //Page 972 another way of doing threads
 void *thread(void *vargp){
+    int conn_fd = (int)vargp;
     Pthread_detach(pthread_self());
-    while(1){
-        int connfd = sbuf_remove(&sbuf);
-        handler(connfd);
-        Close(connfd);
-    }
+    handler(conn_fd);
+    Close(conn_fd);
+    return NULL;
 }
 
 void interrupt_handler(int num){
     cache_destruct(CACHE_LIST);
     free(CACHE_LIST);
-    CACHE_LIST = NULL;
     exit(0);
 }
-
-//valgrind ./proxy
 
 int main(int argc, char** argv)
 {
@@ -259,9 +277,6 @@ int main(int argc, char** argv)
         exit(0);
     }
 
-    //TODO cache list/item init and set to null
-    sbuf_init(&sbuf, SBUFSIZE);
-
     /*  Listen for incoming connections on port
     *   set listen_fd to return fd of Open_listenfd
     */
@@ -271,18 +286,16 @@ int main(int argc, char** argv)
     cache_init(CACHE_LIST);
     signal(SIGINT, interrupt_handler);
 
-    //Prethreading creating workiner threads
-    int i;
-    for(i = 0; i < NTHREADS; i++)
-        Pthread_create(&thread_id, NULL, thread, NULL);
-
     while(1){
         client_len = sizeof(struct sockaddr_storage);
         connection_fd = Accept(listen_fd, (SA *)&clientaddr, &client_len);
 
         Getnameinfo((SA *) &clientaddr, client_len, client_hostname, MAXLINE, client_port, MAXLINE, 0);
         printf("Connected to (%s, %s)\n", client_hostname, client_port);
-        sbuf_insert(&sbuf, connection_fd);
+        Pthread_create(&thread_id, NULL, thread, (void *) connection_fd);
+
+        //handler(connection_fd);                                               //Used in part 1
+        //Close(connection_fd);                                                 //Used in part 1
     }
     exit(0);
 

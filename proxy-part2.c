@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "csapp.h"
 #include <ctype.h>
+#include "cache.h"
 
 /* Recommended max cache and object sizes */
 #define MAX_CACHE_SIZE 1049000
@@ -12,10 +13,14 @@ static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64;
 //My port: 50182
 //Tiny port: 50183
 
+void interrupt_handler(int);
 void handler(int connection_fd);
 void parse_uri(char *uri, char *hostname, char *path, int *port);
 void build_http_header(char *http_header, char *hostname, char *path, int port, rio_t *rio_client);
-void *thread(void * vargp);                                                     //Notes for threading pg 953 txtbook
+void *thread(void * vargp);
+
+CacheList* CACHE_LIST;
+                                                  //Notes for threading pg 953 txtbook
 
 void handler(int connection_fd){
 
@@ -248,6 +253,13 @@ void *thread(void *vargp){
     return NULL;
 }
 
+void interrupt_handler(int num){
+    cache_destruct(CACHE_LIST);
+    free(CACHE_LIST);
+    CACHE_LIST = NULL;
+    exit(0);
+}
+
 int main(int argc, char** argv)
 {
     int listen_fd, connection_fd;
@@ -267,6 +279,10 @@ int main(int argc, char** argv)
     */
     listen_fd = Open_listenfd(argv[1]);
 
+    CACHE_LIST = (CacheList*)malloc(sizeof(CacheList));
+    cache_init(CACHE_LIST);
+    signal(SIGINT, interrupt_handler);
+
     while(1){
         client_len = sizeof(struct sockaddr_storage);
         connection_fd = Accept(listen_fd, (SA *)&clientaddr, &client_len);
@@ -283,4 +299,3 @@ int main(int argc, char** argv)
     printf("%s", user_agent_hdr);
     return 0;
 }
-

@@ -19,7 +19,7 @@ void sbuf_deinit(sbuf_t *sp){
 void sbuf_insert(sbuf_t *sp, int item){
   P(&sp->slots);                                                                //Wait for available items
   P(&sp->mutex);                                                                //Lock the buffer
-  item = sp->buf[(++sp->front)%(sp->n)];                                        //Remove the item
+  sp->buf[(++sp->rear)%(sp->n)] = item;                                        //Remove the item
   V(&sp->mutex);                                                                //Unlock the buffer
   V(&sp->items);                                                                //Announce available slot
 }
