@@ -1,38 +1,82 @@
 #include "cache.h"
+#include <assert.h>
 
+#define MAX_CACHE_SIZE 10000
+#define MAX_OBJECT_SIZE 1000
 
-typedef struct {
-  size_t size;
-  CachedItem* first;
-  CachedItem* last;
-} CacheList;
-
-struct CachedItem {
-  char url[MAXLINE];
-  void *item_p;
-  size_t size;
-  CachedItem *prev;
-  CachedItem *next;
-};
-
-extern void cache_init(CacheList *list){
+void cache_init(CacheList *list){
   list->size = 0;
   list->first = NULL;
   list->last = NULL;
 }
-//size = 0
-//first = NULL
-//last = NULL
 
-extern void cache_URL(char *URL, void *item, size_t size, CacheList *list){
+void cache_URL(char *URL, void *item, size_t size, CacheList *list){
+  //check object size
+  if (size > MAX_OBJECT_SIZE){
+    return;
+  }
 
+  //check space in linked list, evict while necessary
+  while(list->size + size > MAX_CACHE_SIZE){
+    evict(list);
+  }
+
+  list->size += size;
+
+  CachedItem* cached_item = (CachedItem*) malloc(sizeof(struct CachedItem));
+
+  strcpy(cached_item->url, URL);
+
+  cached_item->item_p = item;
+  cached_item->size = size;
+
+  //If list is empty, set first and last item in list to item
+  if(list->first == NULL){
+    list->first = item;
+    list->last = item;
+  }
+  else{
+    //Non empty list
+    //reorder so item is first and original first is now next
+    list->first->prev = item;
+    cached_item->next = list->first;
+    cached_item->prev = NULL;
+    list->first = item;
+  }
+
+  return;
 }
 //Check size, see if it fits in parameters 1mib
 //Check space of linked list, evict if necessary(while needed)
 //malloc cached item (sizeof(CachedItem))
 //Connect to front of the list append_to_front()
 
-extern void evict(CacheList *list);
+void evict(CacheList *list){
+
+  assert(list->size > 0);
+  assert(list->first != NULL);
+  assert(list->last != NULL);
+
+  //if it's last last item the list
+  if(list->last->size == list->size){
+    free(list->last->item_p);
+    free(list->last);
+    list->last = NULL;
+    list->first = NULL;
+    list->size = 0;
+    return;
+  }
+
+  assert(list->last != list->first);
+
+  //Remove any item from list except last item
+  list->last = list->last->prev;
+  list->size -= list->last->next->size;
+  free(list->last->next->item_p);
+  free(list->last->next);
+  list->last->next = NULL;
+  return;
+}
 //go to *last
 //last_size = sizeof(*last)
 //then go to prev
@@ -40,7 +84,23 @@ extern void evict(CacheList *list);
 //assign *last to *prev
 //update list size -= last_size
 
-extern CachedItem *find(char *URL, CacheList *list);
+CachedItem *find(char *URL, CacheList *list){
+  //list is empty, return NULL
+  if(list->size < 1)
+    return NULL;
+
+  //Check if the last item in list is it
+  if(!strcmp(list->last->url, URL))
+    return list->last;
+
+  CachedItem* temp = list->first;
+  while(temp != NULL){
+    if(!strcmp(temp->url, URL))
+      return temp;
+    temp = temp->next;
+  }
+  return NULL;
+}
 //iterate through *list
 //if url == list.url
 //  return CachedItem
@@ -48,7 +108,42 @@ extern CachedItem *find(char *URL, CacheList *list);
 
 //extern CachedItem get_cache(char *URL, CacheList *list);
 
-extern void move_to_front(char *URL, CacheList *list);
+void move_to_front(char *URL, CacheList *list){
+  CachedItem* item = find(URL, list);
+  //Item dne
+  if(item == NULL)
+    return;
+
+  //Check if it's first in list
+  if(item == list->first)
+    return;
+
+  //Check if its last in list
+  if(item == list->last){
+    list->last = item->prev;
+    list->first->prev = item;
+    item->next = list->first;
+    item->prev = NULL;
+    list->last->next = NULL;
+    list->first = item;
+    return;
+  }
+
+  //its in the middle
+  item->prev->next = item->next;
+  item->next->prev = item->prev;
+  item->prev = NULL;
+  item->next = list->first;
+  list->first->prev = item;
+  list->first = item;
+  return;
+
+
+
+
+
+
+}
 //go to item and check if its there, if not return
 //if url == *first->url
 //  return
@@ -69,15 +164,19 @@ extern void move_to_front(char *URL, CacheList *list);
 //  list->first->prev = item
 //  list->first = item
 
-extern void print_URLs(CacheList *list);
-
-extern void cache_destruct(CacheList *list){
-  CachedItem curr = list->last;
-  while(curr->prev != NULL){
-    curr = curr->prev;
-    free(curr);
+void print_URLs(CacheList *list){
+  if(list->size > 0){
+    CachedItem* item = list->first;
+    while(item->next != NULL){
+      printf("%s/n", item->url);
+      item = item->next;
+    }
+    printf("%s\n", item->url);
   }
-  free(curr);
+}
+
+void cache_destruct(CacheList *list){
+  while(list->size != 0)
+    evict(list);
 }
 //Free the cache, start at end then go prev and free as you go
-#endif

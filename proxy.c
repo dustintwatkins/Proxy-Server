@@ -2,6 +2,7 @@
 #include "csapp.h"
 #include <ctype.h>
 #include "sbuf.h"
+#include "cache.h"
 
 /* Recommended max cache and object sizes */
 #define MAX_CACHE_SIZE 1049000
@@ -16,12 +17,17 @@ static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64;
 //My port: 50182
 //Tiny port: 50183
 
+void interrupt_handler(int);
 void handler(int connection_fd);
 void parse_uri(char *uri, char *hostname, char *path, int *port);
 void build_http_header(char *http_header, char *hostname, char *path, int port, rio_t *rio_client);
 void *thread(void * vargp);
 
-sbuf_t sbuf;                                                 //Notes for threading pg 953 txtbook
+//TODO create CachedItem/ list
+sbuf_t sbuf;
+
+                                        //Notes for threading pg 953 txtbook
+CacheList* CACHE_LIST;
 
 void handler(int connection_fd){
 
@@ -59,9 +65,8 @@ void handler(int connection_fd){
     //Parse the URI to get hostname, path and port
     parse_uri(uri, hostname, path, &port);
 
-    // printf("PATH: %s\n", path);
-    // printf("PORT: %d\n", port);
-    // printf("HOSTNAME: %s\n", hostname);
+    //TODO check if uri is in cache
+
 
     //Build the http header from the parsed_uri to send to server
     build_http_header(http_header, hostname, path, port, &rio_client);
@@ -231,6 +236,15 @@ void *thread(void *vargp){
     }
 }
 
+void interrupt_handler(int num){
+    cache_destruct(CACHE_LIST);
+    free(CACHE_LIST);
+    CACHE_LIST = NULL;
+    exit(0);
+}
+
+//valgrind ./proxy
+
 int main(int argc, char** argv)
 {
     int listen_fd, connection_fd;
@@ -245,12 +259,17 @@ int main(int argc, char** argv)
         exit(0);
     }
 
+    //TODO cache list/item init and set to null
     sbuf_init(&sbuf, SBUFSIZE);
 
     /*  Listen for incoming connections on port
     *   set listen_fd to return fd of Open_listenfd
     */
     listen_fd = Open_listenfd(argv[1]);
+
+    CACHE_LIST = (CacheList*)malloc(sizeof(CacheList));
+    cache_init(CACHE_LIST);
+    signal(SIGINT, interrupt_handler);
 
     //Prethreading creating workiner threads
     int i;

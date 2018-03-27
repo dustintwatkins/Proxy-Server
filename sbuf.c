@@ -17,18 +17,16 @@ void sbuf_deinit(sbuf_t *sp){
 
 //Insert item onto the rear of shared buffer sp
 void sbuf_insert(sbuf_t *sp, int item){
-  int item;
-  P(&sp->items);                                                                //Wait for available items
+  P(&sp->slots);                                                                //Wait for available items
   P(&sp->mutex);                                                                //Lock the buffer
   item = sp->buf[(++sp->front)%(sp->n)];                                        //Remove the item
   V(&sp->mutex);                                                                //Unlock the buffer
-  V(&sp->slots);                                                                //Announce available slot
-  return item;
+  V(&sp->items);                                                                //Announce available slot
 }
 
 //Remove and return first item from buffer sp
 int sbuf_remove(sbuf_t *sp){
-  int item
+  int item;
   P(&sp->items);                                                                //Wait for available item
   P(&sp->mutex);                                                                //Lock the buffer
   item = sp->buf[(++sp->front)%(sp->n)];                                        //Remove the item
