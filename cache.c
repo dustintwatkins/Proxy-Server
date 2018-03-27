@@ -99,12 +99,8 @@ CachedItem* find(char *URL, CacheList *list){
 
     CachedItem* temp = list->first;
     while(temp->next != NULL){
-      printf("here\n");
-      printf("temp->url %s\n", temp->url);
       if(strcmp(temp->url, URL) != 0){
-        printf("advance\n");
         temp = temp->next;
-        printf("after advance\n");
       }
       else{
         return temp;

@@ -20,6 +20,7 @@ void build_http_header(char *http_header, char *hostname, char *path, int port, 
 void *thread(void * vargp);
 
 CacheList* CACHE_LIST;
+size_t written = 0;
                                                   //Notes for threading pg 953 txtbook
 
 void handler(int connection_fd){
@@ -52,9 +53,9 @@ void handler(int connection_fd){
     if(cached_item != NULL){
       move_to_front(cached_item->url, CACHE_LIST);
       size_t to_be_written = cached_item->size;
-      size_t written = 0;
+      written = 0;
       char* item_buf = cached_item->item_p;
-      while((written = rio_writen(connection_fd, item_buf, to_be_written)) != written){
+      while((written = rio_writen(connection_fd, item_buf, to_be_written)) != to_be_written){
         item_buf += written;
         to_be_written -= written;
       }
@@ -70,6 +71,7 @@ void handler(int connection_fd){
 
     memset(&path[0], 0, sizeof(path));                                          //Reset the memeory of path
     memset(&hostname[0], 0, sizeof(hostname));                                  //Reset the memory of hostname
+
 
     //Parse the URI to get hostname, path and port
     parse_uri(uri, hostname, path, &port);
@@ -92,7 +94,7 @@ void handler(int connection_fd){
         return;
     }
 
-    printf("CONNECTED!\n");
+    //printf("CONNECTED!\n");
 
     //Send and receive info to and from destination server
     Rio_readinitb(&rio_server, dest_server_fd);
@@ -111,10 +113,7 @@ void handler(int connection_fd){
     if(total_bytes < MAX_OBJECT_SIZE){
       char* to_be_cached = (char*) malloc(total_bytes);
       strcpy(to_be_cached, obj);
-      printf("to_be_cached:\n %s\n", to_be_cached);
-
       cache_URL(buf, to_be_cached, total_bytes, CACHE_LIST);
-
     }
     //Close(dest_server_fd); Used for part 1
 }
@@ -211,7 +210,6 @@ void build_http_header(char *http_header, char *hostname, char *path, int port, 
     int host_len = strlen(host_key);
 
     sprintf(request_header, request_header_format, path);
-    printf("request_header: %s\n", request_header);
 
     while(Rio_readlineb(rio_client, buf, MAXLINE) > 0){
 
@@ -224,7 +222,6 @@ void build_http_header(char *http_header, char *hostname, char *path, int port, 
             //compares host_len chars in buf to host_key
             if(!strncasecmp(buf, host_key, host_len)){
                 strcpy(host_header, buf);
-                printf("HOST_HEADER: %s\n", host_header);
                 continue;
             }
 
@@ -243,14 +240,12 @@ void build_http_header(char *http_header, char *hostname, char *path, int port, 
     sprintf(http_header, "%s%s%s%s%s%s%s", request_header, host_header, connection_header,
                              prox_header, user_agent_hdr, other_headers,
                              carriage_return);
-
-    printf("HTTP_HEADERS: %s\n", http_header);
 }
 
 //Thread routine (also page 953)
 //Page 972 another way of doing threads
 void *thread(void *vargp){
-    int conn_fd = (int)vargp;
+    int conn_fd = *(int*)vargp;
     Pthread_detach(pthread_self());
     handler(conn_fd);
     Close(conn_fd);
@@ -292,7 +287,7 @@ int main(int argc, char** argv)
 
         Getnameinfo((SA *) &clientaddr, client_len, client_hostname, MAXLINE, client_port, MAXLINE, 0);
         printf("Connected to (%s, %s)\n", client_hostname, client_port);
-        Pthread_create(&thread_id, NULL, thread, (void *) connection_fd);
+        Pthread_create(&thread_id, NULL, thread, &connection_fd);
 
         //handler(connection_fd);                                               //Used in part 1
         //Close(connection_fd);                                                 //Used in part 1
